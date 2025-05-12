@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulazione PAC Crypto (BTC, ETH, SOL)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { font-size: 1.5em; }
+    button { padding: 10px 15px; font-size: 1em; margin-top: 10px; }
+    table { border-collapse: collapse; margin-top: 20px; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: right; }
+    th { background: #f9f9f9; }
+  </style>
+</head>
+<body>
+  <h1>Simulazione PAC Crypto: BTC 50%, ETH 25%, SOL 25%</h1>
+  <p>Periodo: ultimi 5 anni (giornaliero)</p>
+  <button id="runBtn">Avvia Simulazione</button>
+  <div id="results"></div>
+  <div id="chart"></div>
+  <script>
+    async function fetchPrices(id, from, to) {
+      const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart/range?vs_currency=eur&from=${from}&to=${to}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      return data.prices.map(p => ({ date: new Date(p[0]), price: p[1] }));
+    }document.getElementById('runBtn').onclick = async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const fiveYearsAgo = now - 5 * 365 * 24 * 3600;
+  const [btc, eth, sol] = await Promise.all([
+    fetchPrices('bitcoin', fiveYearsAgo, now),
+    fetchPrices('ethereum', fiveYearsAgo, now),
+    fetchPrices('solana', fiveYearsAgo, now)
+  ]);
+  // Align dates
+  const map = {};
+  btc.forEach(p => map[p.date.toISOString().split('T')[0]] = { date: p.date, btc: p.price });
+  eth.forEach(p => { const d = p.date.toISOString().split('T')[0]; if (map[d]) map[d].eth = p.price; });
+  sol.forEach(p => { const d = p.date.toISOString().split('T')[0]; if (map[d]) map[d].sol = p.price; });
+  const records = Object.values(map).filter(r => r.eth && r.sol).sort((a,b)=>a.date-b.date);
+
+  let totalBTC=0, totalETH=0, totalSOL=0;
+  const dailyEuro = 3;
+  const weights = { btc: 0.5, eth:0.25, sol:0.25 };
+  const history = [];
+
+  records.forEach(r => {
+    totalBTC += (dailyEuro * weights.btc) / r.btc;
+    totalETH += (dailyEuro * weights.eth) / r.eth;
+    totalSOL += (dailyEuro * weights.sol) / r.sol;
+    const invested = dailyEuro * history.length + dailyEuro;
+    const value = totalBTC * r.btc + totalETH * r.eth + totalSOL * r.sol;
+    history.push({ date: r.date.toISOString().split('T')[0], invested, value });
+  });
+
+  const last = history[history.length-1];
+  const gain = ((last.value - last.invested)/last.invested*100).toFixed(2);
+
+  const resDiv = document.getElementById('results');
+  resDiv.innerHTML = `<p>Totale investito: €${last.invested.toFixed(2)}</p>
+                      <p>Valore attuale: €${last.value.toFixed(2)}</p>
+                      <p>Rendimento: ${gain}%</p>
+                      <button id='downloadCsv'>Scarica CSV</button>`;
+  document.getElementById('downloadCsv').onclick = () => {
+    let csv = 'date,invested,value\n';
+    history.forEach(h => { csv += `${h.date},${h.invested.toFixed(2)},${h.value.toFixed(2)}\n`; });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'pac_history.csv'; a.click();
+  };
+};
+
+  </script>
+</body>
+</html>

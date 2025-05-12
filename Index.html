@@ -1,74 +1,115 @@
-<!DOCTYPE html><html lang="it">
+<!DOCTYPE html>
+<html lang="it">
 <head>
-  <meta charset="UTF-8">
-  <title>Simulazione PAC Crypto (BTC, ETH, SOL)</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    h1 { font-size: 1.5em; }
-    button { padding: 10px 15px; font-size: 1em; margin-top: 10px; }
-    table { border-collapse: collapse; margin-top: 20px; width: 100%; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: right; }
-    th { background: #f9f9f9; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulazione PAC Criptovalute</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
 </head>
 <body>
-  <h1>Simulazione PAC Crypto: BTC 50%, ETH 25%, SOL 25%</h1>
-  <p>Periodo: ultimi 5 anni (giornaliero)</p>
-  <button id="runBtn">Avvia Simulazione</button>
-  <div id="results"></div>
-  <div id="chart"></div>
-  <script>
-    async function fetchPrices(id, from, to) {
-      const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart/range?vs_currency=eur&from=${from}&to=${to}`;
-      const resp = await fetch(url);
-      const data = await resp.json();
-      return data.prices.map(p => ({ date: new Date(p[0]), price: p[1] }));
-    }document.getElementById('runBtn').onclick = async () => {
-  const now = Math.floor(Date.now() / 1000);
-  const fiveYearsAgo = now - 5 * 365 * 24 * 3600;
-  const [btc, eth, sol] = await Promise.all([
-    fetchPrices('bitcoin', fiveYearsAgo, now),
-    fetchPrices('ethereum', fiveYearsAgo, now),
-    fetchPrices('solana', fiveYearsAgo, now)
-  ]);
-  // Align dates
-  const map = {};
-  btc.forEach(p => map[p.date.toISOString().split('T')[0]] = { date: p.date, btc: p.price });
-  eth.forEach(p => { const d = p.date.toISOString().split('T')[0]; if (map[d]) map[d].eth = p.price; });
-  sol.forEach(p => { const d = p.date.toISOString().split('T')[0]; if (map[d]) map[d].sol = p.price; });
-  const records = Object.values(map).filter(r => r.eth && r.sol).sort((a,b)=>a.date-b.date);
+    <h1>Simulazione PAC su Bitcoin, Ethereum e Solana</h1>
+    <button onclick="startSimulation()">Avvia Simulazione</button>
 
-  let totalBTC=0, totalETH=0, totalSOL=0;
-  const dailyEuro = 3;
-  const weights = { btc: 0.5, eth:0.25, sol:0.25 };
-  const history = [];
+    <h2>Tabella dei Risultati</h2>
+    <table id="resultTable" border="1">
+        <thead>
+            <tr>
+                <th>Data</th>
+                <th>BTC (EUR)</th>
+                <th>ETH (EUR)</th>
+                <th>SOL (EUR)</th>
+                <th>Totale Investito (EUR)</th>
+                <th>Valore Totale Attuale (EUR)</th>
+                <th>Rendimento (%)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- I dati verranno inseriti qui -->
+        </tbody>
+    </table>
 
-  records.forEach(r => {
-    totalBTC += (dailyEuro * weights.btc) / r.btc;
-    totalETH += (dailyEuro * weights.eth) / r.eth;
-    totalSOL += (dailyEuro * weights.sol) / r.sol;
-    const invested = dailyEuro * history.length + dailyEuro;
-    const value = totalBTC * r.btc + totalETH * r.eth + totalSOL * r.sol;
-    history.push({ date: r.date.toISOString().split('T')[0], invested, value });
-  });
+    <script>
+        async function startSimulation() {
+            const coins = ['bitcoin', 'ethereum', 'solana'];
+            const interval = 'daily';
+            const startDate = '2018-01-01'; // Data di inizio simulazione (può essere modificata)
 
-  const last = history[history.length-1];
-  const gain = ((last.value - last.invested)/last.invested*100).toFixed(2);
+            // Prepara l'array per i risultati
+            let results = [];
 
-  const resDiv = document.getElementById('results');
-  resDiv.innerHTML = `<p>Totale investito: €${last.invested.toFixed(2)}</p>
-                      <p>Valore attuale: €${last.value.toFixed(2)}</p>
-                      <p>Rendimento: ${gain}%</p>
-                      <button id='downloadCsv'>Scarica CSV</button>`;
-  document.getElementById('downloadCsv').onclick = () => {
-    let csv = 'date,invested,value\n';
-    history.forEach(h => { csv += `${h.date},${h.invested.toFixed(2)},${h.value.toFixed(2)}\n`; });
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'pac_history.csv'; a.click();
-  };
-};
+            // Calcola l'investimento giornaliero
+            const investmentPerDay = 3;
+            const btcAllocation = 0.50 * investmentPerDay;  // 50% su BTC
+            const ethAllocation = 0.25 * investmentPerDay; // 25% su ETH
+            const solAllocation = 0.25 * investmentPerDay; // 25% su SOL
 
-  </script>
+            // Dati storici per le 3 criptovalute
+            for (let coin of coins) {
+                try {
+                    const response = await axios.get(`https://api.coingecko.com/api/v3/coins/${coin}/market_chart`, {
+                        params: {
+                            vs_currency: 'eur',
+                            days: '1825',  // 5 anni di dati
+                            interval: interval
+                        }
+                    });
+
+                    const prices = response.data.prices;
+                    for (let i = 0; i < prices.length; i++) {
+                        let date = new Date(prices[i][0]);
+                        let price = prices[i][1];
+
+                        // Simula l'acquisto giornaliero
+                        let totalInvestment = 0;
+                        if (coin === 'bitcoin') {
+                            totalInvestment = btcAllocation;
+                        } else if (coin === 'ethereum') {
+                            totalInvestment = ethAllocation;
+                        } else if (coin === 'solana') {
+                            totalInvestment = solAllocation;
+                        }
+
+                        // Calcolo del valore totale attuale
+                        let totalValue = 0;
+                        if (coin === 'bitcoin') {
+                            totalValue += btcAllocation / price * prices[i][1];
+                        } else if (coin === 'ethereum') {
+                            totalValue += ethAllocation / price * prices[i][1];
+                        } else if (coin === 'solana') {
+                            totalValue += solAllocation / price * prices[i][1];
+                        }
+
+                        results.push({
+                            date: date.toLocaleDateString(),
+                            btcPrice: btcAllocation / price,
+                            ethPrice: ethAllocation / price,
+                            solPrice: solAllocation / price,
+                            invested: totalInvestment,
+                            value: totalValue
+                        });
+
+                    }
+                } catch (error) {
+                    console.error("Errore nel recupero dei dati:", error);
+                }
+            }
+
+            // Popola la tabella con i dati
+            const tableBody = document.getElementById('resultTable').getElementsByTagName('tbody')[0];
+            results.forEach(result => {
+                const row = tableBody.insertRow();
+                row.innerHTML = `
+                    <td>${result.date}</td>
+                    <td>${result.btcPrice.toFixed(2)}</td>
+                    <td>${result.ethPrice.toFixed(2)}</td>
+                    <td>${result.solPrice.toFixed(2)}</td>
+                    <td>${result.invested.toFixed(2)}</td>
+                    <td>${result.value.toFixed(2)}</td>
+                    <td>${(((result.value - result.invested) / result.invested) * 100).toFixed(2)}%</td>
+                `;
+            });
+        }
+    </script>
 </body>
 </html>
